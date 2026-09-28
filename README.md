@@ -2,6 +2,17 @@
 
 基于 Flask + SQLAlchemy 的校园闲置物品交易平台，以**积分**作为交易媒介，并集成大模型实现自然语言商品检索。
 
+## 下载即玩（免安装）
+
+不想配 Python 环境？直接下载打包好的 Windows 免安装版：
+
+- **GitHub Releases**：https://github.com/zhaiyx2005/campus-secondhand-platform/releases/latest （约 17 MB）
+
+解压后双击 `旧物循用.exe`，程序会自动启动本地服务并打开浏览器（http://127.0.0.1:5000/）。
+首次运行会在同目录生成数据库与上传目录，关闭命令行窗口即停止服务。
+
+> 从源码运行的方式见 [README-一键启动.md](README-一键启动.md)。
+
 ## 技术栈
 
 | 层次 | 技术 |
