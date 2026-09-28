@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}发布闲置商品 - 旧物循用{% endblock %}
+
+{% block content %}
+<section class="publish-page">
+    <div class="page-heading">
+        <div>
+            <span class="section-eyebrow">发布中心</span>
+            <h1>发布闲置商品</h1>
+            <p>填写清晰的信息，让同学更快发现你的宝贝。</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">返回首页</a>
+    </div>
+
+    <div class="publish-layout">
+        <div class="publish-card">
+            <form method="post" enctype="multipart/form-data" data-publish-form>
+                <div class="mb-3">
+                    <label for="title" class="form-label">商品标题</label>
+                    <input type="text" class="form-control" id="title" name="title" value="{{ (form_data.title if form_data else '') }}" placeholder="例如：九成新高等数学教材">
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">商品描述</label>
+                    <textarea class="form-control" id="description" name="description" rows="5" placeholder="描述商品成色、购买时间、适合人群等">{{ form_data.description if form_data else '' }}</textarea>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label for="points" class="form-label">所需积分</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="points" name="points" min="1" step="1" value="{{ (form_data.points if form_data else '') }}" placeholder="例如：50">
+                            <span class="input-group-text">积分</span>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="label-action-row">
+                            <label for="tags" class="form-label">商品标签</label>
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-ai-tags-button>AI生成标签</button>
+                        </div>
+                        <input type="text" class="form-control" id="tags" name="tags" value="{{ (form_data.tags if form_data else '') }}" placeholder="例如：#衣服 #连衣裙 #毕业闲置">
+                        <div class="form-text">可填写多个标签，用空格或逗号分隔；没有 # 时系统会自动补上。</div>
+                        <div class="form-text" data-ai-tags-status></div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label for="images" class="form-label">商品图片</label>
+                    <div class="upload-zone">
+                        <input type="file" class="form-control" id="images" name="images" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif" multiple>
+                        <div class="upload-zone-text">
+                            <strong>上传真实商品图片</strong>
+                            <span id="imageHelp">支持 jpg、jpeg、png、gif，至少 1 张，最多 6 张。</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-gradient btn-lg mt-4">发布商品</button>
+            </form>
+        </div>
+
+        <aside class="publish-tips-card">
+            <h2>发布小贴士</h2>
+            <ul>
+                <li>标题要清楚，直接说明商品名称和状态。</li>
+                <li>图片要真实，尽量展示正面和细节。</li>
+                <li>价格要合理，积分更容易被同学接受。</li>
+                <li>建议校内线下交易，确认商品后再完成交换。</li>
+            </ul>
+        </aside>
+    </div>
+</section>
+{% endblock %}

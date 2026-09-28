@@ -1,0 +1,76 @@
+{% extends "admin/base.html" %}
+
+{% block title %}用户管理 - 旧物循用{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header">
+    <div>
+        <h1>用户管理</h1>
+        <p>管理用户认证、管理员权限，以及删除用户关联数据。</p>
+    </div>
+    <form class="admin-search" method="get" action="{{ url_for('admin_users') }}">
+        <input class="form-control" name="q" value="{{ search_keyword }}" placeholder="搜索账号、昵称、真实姓名、学校">
+        <button class="btn btn-primary" type="submit">搜索</button>
+    </form>
+</div>
+
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table align-middle admin-table">
+            <thead>
+                <tr>
+                    <th>用户</th>
+                    <th>学校/联系方式</th>
+                    <th>积分</th>
+                    <th>认证</th>
+                    <th>权限</th>
+                    <th>注册时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                    <tr>
+                        <td>
+                            <strong>{{ user.nickname }}</strong>
+                            {% if user.is_verified %}
+                                <span class="verified-badge">已认证</span>
+                            {% endif %}
+                            <div class="text-muted small">{{ user.account }}</div>
+                        </td>
+                        <td>
+                            <div>{{ user.school or "未填写学校" }}</div>
+                            <div class="text-muted small">{{ user.contact or "未填写联系方式" }}</div>
+                        </td>
+                        <td>{{ user.points_balance }}</td>
+                        <td>{{ "已认证" if user.is_verified else "未认证" }}</td>
+                        <td>{{ "管理员" if user.is_admin else "普通用户" }}</td>
+                        <td>{{ user.create_time.strftime("%Y-%m-%d %H:%M") }}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <form method="post" action="{{ url_for('admin_toggle_user_verified', user_id=user.id) }}">
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">
+                                        {{ "取消认证" if user.is_verified else "设为认证" }}
+                                    </button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin_toggle_user_admin', user_id=user.id) }}">
+                                    <button class="btn btn-sm btn-outline-secondary" type="submit">
+                                        {{ "取消管理员" if user.is_admin else "设为管理员" }}
+                                    </button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin_delete_user', user_id=user.id) }}" onsubmit="return confirm('确定删除该用户及其出售、购买、收藏、好友、聊天等关联信息吗？此操作不可恢复。');">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">删除用户</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">暂无匹配用户。</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

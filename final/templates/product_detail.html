@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.title }} - 旧物循用{% endblock %}
+
+{% block content %}
+<section class="detail-page">
+    <div class="profile-topbar">
+        <a href="{{ url_for('index') }}">← 返回首页</a>
+        <h1>商品详情</h1>
+        <span></span>
+    </div>
+
+    <div class="detail-layout">
+        <div class="detail-gallery profile-card">
+            {% if product.images %}
+                <img class="detail-main-image" src="{{ product.first_image_url }}" alt="{{ product.title }}">
+                <div class="detail-thumbs">
+                    {% for image in product.images %}
+                        <img src="{{ image.image_url }}" alt="{{ product.title }}">
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="detail-image-empty">暂无图片</div>
+            {% endif %}
+        </div>
+
+        <div class="profile-card detail-info">
+            <div class="detail-status-row">
+                <span class="tag-pill">{{ product.status }}</span>
+                <span class="text-muted">浏览 {{ product.view_count }} 次</span>
+            </div>
+            <h2>{{ product.title }}</h2>
+            <p class="detail-price">{{ product.points }} 积分</p>
+            <div class="tag-row">
+                {% for tag in product.tag_list %}
+                    <span class="tag-pill">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            <p class="detail-description">{{ product.description }}</p>
+            <div class="detail-seller">
+                <span>
+                    发布者：{{ product.user.nickname }}
+                    {% if product.user.is_verified %}
+                        <span class="verified-badge">已认证</span>
+                    {% endif %}
+                </span>
+                <span>发布时间：{{ product.create_time.strftime("%Y-%m-%d %H:%M") }}</span>
+                {% if product.user.school %}
+                    <span>学校：{{ product.user.school }}</span>
+                {% endif %}
+                {% if product.user.contact %}
+                    <span>联系方式：{{ product.user.contact }}</span>
+                {% endif %}
+            </div>
+
+            {% if can_view_buyer_info %}
+                <div class="buyer-info-box">
+                    <strong>购买人信息</strong>
+                    <span>昵称：{{ existing_order.buyer.nickname }}</span>
+                    <span>真实姓名：{{ existing_order.buyer.real_name or "未填写" }}</span>
+                    <span>收货地址：{{ existing_order.buyer.shipping_address or "未填写" }}</span>
+                </div>
+            {% endif %}
+
+            <div class="detail-actions">
+                {% if product.user_id == current_user_id %}
+                    <a class="btn btn-outline-primary" href="{{ url_for('profile') }}">管理我的发布</a>
+                {% else %}
+                    <form method="post" action="{{ url_for('toggle_favorite', product_id=product.id) }}">
+                        <button class="btn btn-outline-secondary" type="submit">{{ "取消收藏" if is_favorited else "收藏" }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('send_friend_request_to_user', user_id=product.user_id) }}">
+                        <button class="btn btn-outline-primary" type="submit">添加卖家好友</button>
+                    </form>
+                    <form method="post" action="{{ url_for('create_order', product_id=product.id) }}">
+                        <button class="btn btn-primary" type="submit" {% if product.status != "在售" or existing_order %}disabled{% endif %}>
+                            {{ "立即兑换" if product.status == "在售" and not existing_order else "不可购买" }}
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

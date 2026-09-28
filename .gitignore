@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 构建与打包产物
+_build/
+dist/
+build/
+*.spec
+*.exe
+*.zip
+
+# 数据库（含运行时数据）
+*.db
+*.sqlite3
+
+# 用户上传的文件
+uploads/
+
+# 环境变量与密钥
+.env
+*.env
+
+# WorkBuddy 工作区（含会话记录，不入库）
+.workbuddy/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.tmp

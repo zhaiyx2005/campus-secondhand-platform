@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+
+{% block title %}订单管理 - 旧物循用{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header">
+    <div>
+        <h1>订单管理</h1>
+        <p>查看平台积分交易记录。</p>
+    </div>
+    <form class="admin-search" method="get" action="{{ url_for('admin_orders') }}">
+        <input class="form-control" name="q" value="{{ search_keyword }}" placeholder="搜索商品、买家账号或昵称">
+        <button class="btn btn-primary" type="submit">搜索</button>
+    </form>
+</div>
+
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table align-middle admin-table">
+            <thead>
+                <tr>
+                    <th>订单号</th>
+                    <th>商品</th>
+                    <th>买家</th>
+                    <th>卖家</th>
+                    <th>积分</th>
+                    <th>状态</th>
+                    <th>时间</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td>#{{ order.id }}</td>
+                        <td><a href="{{ url_for('product_detail', product_id=order.product.id) }}">{{ order.product.title }}</a></td>
+                        <td>
+                            <strong>{{ order.buyer.nickname }}</strong>
+                            <div class="text-muted small">{{ order.buyer.account }}</div>
+                        </td>
+                        <td>
+                            <strong>{{ order.seller.nickname }}</strong>
+                            <div class="text-muted small">{{ order.seller.account }}</div>
+                        </td>
+                        <td>{{ order.points }}</td>
+                        <td>{{ order.status }}</td>
+                        <td>{{ order.create_time.strftime("%Y-%m-%d %H:%M") }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">暂无匹配订单。</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

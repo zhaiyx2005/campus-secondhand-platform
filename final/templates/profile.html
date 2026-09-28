@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}个人中心 - 旧物循用{% endblock %}
+
+{% block content %}
+<section class="profile-page">
+    <div class="profile-topbar">
+        <a href="{{ url_for('index') }}">← 返回主页</a>
+        <h1>个人中心</h1>
+        <span></span>
+    </div>
+
+    <div class="profile-card user-info-card">
+        <div class="card-section-title">用户信息</div>
+        <div class="user-info-grid">
+            <div class="avatar-box">
+                {% if user.avatar %}
+                    <img class="avatar-image" src="{{ user.avatar }}" alt="用户头像">
+                {% else %}
+                    <div class="avatar-dot">{{ user.nickname[:1] }}</div>
+                {% endif %}
+                <form method="post" action="{{ url_for('update_avatar') }}" enctype="multipart/form-data" class="avatar-form">
+                    <input class="form-control form-control-sm" type="file" name="avatar" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif" required>
+                    <button class="btn btn-sm btn-outline-primary w-100" type="submit">更换头像</button>
+                </form>
+            </div>
+
+            <form method="post" action="{{ url_for('update_profile_info') }}" class="user-fields-form">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="nickname">昵称</label>
+                        <input class="form-control" id="nickname" name="nickname" value="{{ user.nickname }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="real_name">真实姓名</label>
+                        <input class="form-control" id="real_name" name="real_name" value="{{ user.real_name or '' }}" placeholder="用于学号认证">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="contact">手机号/联系方式</label>
+                        <input class="form-control" id="contact" name="contact" value="{{ user.contact or '' }}" placeholder="例如：138****5678">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="school">学校</label>
+                        <input class="form-control" id="school" name="school" value="{{ user.school or '' }}" placeholder="例如：某某大学">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="shipping_address">收货地址</label>
+                        <input class="form-control" id="shipping_address" name="shipping_address" value="{{ user.shipping_address or '' }}" placeholder="例如：宿舍楼、门牌号或校内取货点">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="personal_tags">我的标签</label>
+                        <input class="form-control" id="personal_tags" name="personal_tags" value="{{ user.personal_tags or '' }}" placeholder="#考研 #教材 #数码爱好者">
+                    </div>
+                </div>
+                <div class="profile-meta-row">
+                    <span>用户名：{{ user.account }}</span>
+                    <span>昵称：{{ user.nickname }}</span>
+                    <span>姓名：{{ user.real_name or "未填写" }}</span>
+                    <span>信用分：{{ user.credit_score }}</span>
+                    <span>认证：{{ "已认证" if user.is_verified else "未认证" }}</span>
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">保存资料</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="profile-grid-two">
+        <div class="profile-card">
+            <div class="card-section-title">修改密码</div>
+            <form method="post" action="{{ url_for('change_password') }}" class="stack-form">
+                <input class="form-control" type="password" name="old_password" placeholder="原密码" required>
+                <input class="form-control" type="password" name="new_password" placeholder="新密码，不少于 6 位" required>
+                <input class="form-control" type="password" name="confirm_password" placeholder="确认新密码" required>
+                <button class="btn btn-outline-primary" type="submit">修改密码</button>
+            </form>
+        </div>
+
+        <div class="profile-card">
+            <div class="card-section-title">学号认证</div>
+            {% if pending_verification_request %}
+                <div class="request-status">认证申请待审核：{{ pending_verification_request.real_name }} / {{ pending_verification_request.student_id }}</div>
+            {% endif %}
+            <form method="post" action="{{ url_for('verify_student') }}" class="stack-form">
+                <input class="form-control" type="text" name="real_name" value="{{ user.real_name or '' }}" placeholder="请输入真实姓名" required>
+                <input class="form-control" type="text" name="student_id" value="{{ user.student_id or '' }}" placeholder="请输入学号" required>
+                <button class="btn btn-outline-primary" type="submit" {% if pending_verification_request %}disabled{% endif %}>
+                    {{ "等待审核" if pending_verification_request else ("更新认证" if user.is_verified else "提交认证") }}
+                </button>
+            </form>
+            <p class="text-muted mt-3 mb-0">提交后由管理员审核，审核通过后会显示“已认证”。</p>
+            {% if verification_requests %}
+                <div class="mini-request-list">
+                    {% for item in verification_requests %}
+                        <p>{{ item.create_time.strftime("%m-%d %H:%M") }} · {{ item.status }} · {{ item.real_name }} / {{ item.student_id }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="profile-card points-card">
+        <div class="card-section-title">积分卡片</div>
+        <p class="points-balance">剩余积分：<strong>{{ user.points_balance }}</strong></p>
+        {% if pending_recharge_request %}
+            <div class="request-status">积分申请待审核：{{ pending_recharge_request.points }} 积分</div>
+        {% endif %}
+        <div class="recharge-grid">
+            {% for amount, points in recharge_plans.items() %}
+                <form method="post" action="{{ url_for('recharge_points') }}">
+                    <input type="hidden" name="amount" value="{{ amount }}">
+                    <button type="submit" {% if pending_recharge_request %}disabled{% endif %}>
+                        {{ amount }}元 = {{ points }}积分
+                    </button>
+                </form>
+            {% endfor %}
+        </div>
+        <p class="text-muted mt-3 mb-0">点击档位后会向管理员提交积分增添申请，通过后积分到账。</p>
+        {% if recharge_requests %}
+            <div class="mini-request-list">
+                {% for item in recharge_requests %}
+                    <p>{{ item.create_time.strftime("%m-%d %H:%M") }} · {{ item.status }} · {{ item.points }} 积分</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="point-records">
+            <h2>积分明细</h2>
+            {% if point_records %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>类型</th>
+                                <th>变动</th>
+                                <th>余额</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in point_records %}
+                                <tr>
+                                    <td>{{ record.create_time.strftime("%m-%d %H:%M") }}</td>
+                                    <td>{{ record.record_type }}</td>
+                                    <td>{{ "+" if record.change_amount > 0 else "" }}{{ record.change_amount }}</td>
+                                    <td>{{ record.balance_after }}</td>
+                                    <td>{{ record.remark }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">暂无积分明细。</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="profile-summary-grid">
+        <div class="profile-card mini-card">
+            <h2>我的发布</h2>
+            <p>在售：{{ selling_count }}</p>
+            <p>已售出：{{ sold_count }}</p>
+            <p>已下架：{{ removed_count }}</p>
+        </div>
+        <div class="profile-card mini-card">
+            <h2>我的订单</h2>
+            <p>我买到的：{{ purchase_count }}</p>
+            <p>我卖出的：{{ sale_count }}</p>
+            <p>已完成：{{ completed_order_count }}</p>
+        </div>
+        <div class="profile-card mini-card">
+            <h2>我的收藏</h2>
+            <p>收藏商品：{{ favorite_count }}</p>
+            <p>浏览历史：{{ browse_history_count }}</p>
+            <a href="#favorites">查看收藏</a>
+        </div>
+    </div>
+
+    <div class="profile-card" id="orders">
+        <div class="card-section-title">我的订单</div>
+        <div class="profile-grid-two">
+            <div>
+                <h2 class="subsection-title">我买到的</h2>
+                {% if purchases %}
+                    <div class="compact-list">
+                        {% for order in purchases %}
+                            <a href="{{ url_for('product_detail', product_id=order.product.id) }}">
+                                <span>{{ order.product.title }}</span>
+                                <strong>{{ order.points }} 积分</strong>
+                                <small>{{ order.status }} · {{ order.create_time.strftime("%m-%d %H:%M") }}</small>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">暂无买入订单。</p>
+                {% endif %}
+            </div>
+            <div>
+                <h2 class="subsection-title">我卖出的</h2>
+                {% if sales %}
+                    <div class="compact-list">
+                        {% for order in sales %}
+                            <a href="{{ url_for('product_detail', product_id=order.product.id) }}">
+                                <span>{{ order.product.title }}</span>
+                                <strong>{{ order.points }} 积分</strong>
+                                <small>{{ order.status }} · {{ order.create_time.strftime("%m-%d %H:%M") }}</small>
+                                <small>买家昵称：{{ order.buyer.nickname }} · 真实姓名：{{ order.buyer.real_name or "未填写" }}</small>
+                                <small>收货地址：{{ order.buyer.shipping_address or "未填写" }}</small>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">暂无卖出订单。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-card" id="favorites">
+        <div class="card-section-title">收藏与浏览</div>
+        <div class="profile-grid-two">
+            <div>
+                <h2 class="subsection-title">收藏商品</h2>
+                {% if favorites %}
+                    <div class="compact-list">
+                        {% for favorite in favorites %}
+                            <a href="{{ url_for('product_detail', product_id=favorite.product.id) }}">
+                                <span>{{ favorite.product.title }}</span>
+                                <strong>{{ favorite.product.points }} 积分</strong>
+                                <small>{{ favorite.create_time.strftime("%m-%d %H:%M") }}</small>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">暂无收藏商品。</p>
+                {% endif %}
+            </div>
+            <div>
+                <h2 class="subsection-title">浏览历史</h2>
+                {% if browse_histories %}
+                    <div class="compact-list">
+                        {% for history in browse_histories %}
+                            <a href="{{ url_for('product_detail', product_id=history.product.id) }}">
+                                <span>{{ history.product.title }}</span>
+                                <strong>{{ history.view_count }} 次</strong>
+                                <small>{{ history.last_viewed_at.strftime("%m-%d %H:%M") }}</small>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">暂无浏览历史。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-card">
+        <div class="card-section-title">我的发布列表</div>
+        {% if products %}
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>商品</th>
+                            <th>积分</th>
+                            <th>标签</th>
+                            <th>状态</th>
+                            <th>发布时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in products %}
+                            <tr>
+                                <td>
+                                    <div class="profile-product-cell">
+                                        <img src="{{ product.first_image_url }}" alt="{{ product.title }}">
+                                        <span>{{ product.title }}</span>
+                                    </div>
+                                </td>
+                                <td>{{ product.points }}</td>
+                                <td>{{ product.tags }}</td>
+                                <td>{{ product.status }}</td>
+                                <td>{{ product.create_time.strftime("%Y-%m-%d %H:%M") }}</td>
+                                <td>
+                                    <form method="post" action="{{ url_for('update_product_status', product_id=product.id) }}" class="status-form">
+                                        <select class="form-select form-select-sm" name="status">
+                                            {% for status in ["在售", "已售出", "已下架"] %}
+                                                <option value="{{ status }}" {% if product.status == status %}selected{% endif %}>{{ status }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">保存</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">你还没有发布商品。</p>
+        {% endif %}
+    </div>
+
+    <div class="profile-grid-two">
+        <div class="profile-card" id="friends">
+            <div class="card-section-title">好友管理</div>
+            <form method="post" action="{{ url_for('send_friend_request') }}" class="friend-form">
+                <input class="form-control" name="account" placeholder="输入对方昵称、真实姓名或用户名">
+                <button class="btn btn-outline-primary" type="submit">发送申请</button>
+            </form>
+            <div class="friend-section">
+                <strong>好友列表</strong>
+                {% if friends %}
+                    {% for friend in friends %}
+                        <form method="post" action="{{ url_for('remove_friend', friend_id=friend.id) }}" class="friend-row">
+                            <span>{{ friend.nickname }} <span class="text-muted">({{ friend.account }})</span></span>
+                            <div class="friend-actions">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('profile', chat_with=friend.id) }}">聊天</a>
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">删除</button>
+                            </div>
+                        </form>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">暂无好友。</p>
+                {% endif %}
+            </div>
+            <div class="friend-section">
+                <strong>收到的申请</strong>
+                {% if incoming_friend_requests %}
+                    {% for item in incoming_friend_requests %}
+                        <form method="post" action="{{ url_for('respond_friend_request', request_id=item.id) }}" class="request-row">
+                            <span>{{ item.requester.nickname }}</span>
+                            <button class="btn btn-sm btn-outline-primary" name="action" value="accept" type="submit">同意</button>
+                            <button class="btn btn-sm btn-outline-secondary" name="action" value="reject" type="submit">拒绝</button>
+                        </form>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">暂无待处理申请。</p>
+                {% endif %}
+            </div>
+            <div class="friend-section">
+                <strong>发出的申请</strong>
+                {% if outgoing_friend_requests %}
+                    {% for item in outgoing_friend_requests %}
+                        <form method="post" action="{{ url_for('cancel_friend_request', request_id=item.id) }}" class="friend-row">
+                            <span>{{ item.receiver.nickname }} <span class="text-muted">待处理</span></span>
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">撤回</button>
+                        </form>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">暂无发出的申请。</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="profile-card">
+            <div class="card-section-title">系统设置</div>
+            <div class="settings-list">
+                {% if current_user_is_admin %}
+                    <a href="{{ url_for('admin_dashboard') }}">管理后台</a>
+                {% endif %}
+                <a href="{{ url_for('forgot_password') }}">找回密码</a>
+                <a href="{{ url_for('logout') }}">退出登录</a>
+                <span>关于我们</span>
+                <span>帮助与反馈</span>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

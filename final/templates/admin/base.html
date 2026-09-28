@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="admin-page">
+    <div class="admin-shell">
+        <aside class="admin-sidebar">
+            <div class="admin-brand">管理后台</div>
+            <nav class="admin-nav">
+                <a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' else '' }}">概览</a>
+                <a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint in ['admin_users'] else '' }}">用户管理</a>
+                <a href="{{ url_for('admin_points') }}" class="{{ 'active' if request.endpoint in ['admin_points'] else '' }}">积分管理</a>
+                <a href="{{ url_for('admin_verifications') }}" class="{{ 'active' if request.endpoint in ['admin_verifications'] else '' }}">认证管理</a>
+                <a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint in ['admin_products'] else '' }}">商品管理</a>
+                <a href="{{ url_for('admin_orders') }}" class="{{ 'active' if request.endpoint in ['admin_orders'] else '' }}">订单管理</a>
+                <a href="{{ url_for('index') }}">返回前台</a>
+            </nav>
+        </aside>
+
+        <main class="admin-main">
+            {% block admin_content %}{% endblock %}
+        </main>
+    </div>
+</section>
+{% endblock %}

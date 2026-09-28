@@ -1,0 +1,107 @@
+{% extends "admin/base.html" %}
+
+{% block title %}管理后台 - 旧物循用{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header">
+    <div>
+        <h1>平台概览</h1>
+        <p>查看用户、商品和交易的当前状态。</p>
+    </div>
+</div>
+
+<div class="admin-stat-grid">
+    <div class="admin-stat-card">
+        <span>用户总数</span>
+        <strong>{{ user_count }}</strong>
+        <small>管理员 {{ admin_count }} · 已认证 {{ verified_user_count }}</small>
+    </div>
+    <div class="admin-stat-card">
+        <span>商品总数</span>
+        <strong>{{ product_count }}</strong>
+        <small>在售 {{ selling_count }} · 已售出 {{ sold_count }} · 下架 {{ removed_count }}</small>
+    </div>
+    <div class="admin-stat-card">
+        <span>订单总数</span>
+        <strong>{{ order_count }}</strong>
+        <small>累计流转 {{ order_points_total }} 积分</small>
+    </div>
+</div>
+
+<div class="admin-grid-two">
+    <div class="admin-card">
+        <div class="admin-card-title">
+            <h2>最新用户</h2>
+            <a href="{{ url_for('admin_users') }}">查看全部</a>
+        </div>
+        {% if latest_users %}
+            <div class="admin-list">
+                {% for user in latest_users %}
+                    <div>
+                        <span>{{ user.nickname }}</span>
+                        <small>{{ user.account }} · {{ user.create_time.strftime("%m-%d %H:%M") }}</small>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">暂无用户。</p>
+        {% endif %}
+    </div>
+
+    <div class="admin-card">
+        <div class="admin-card-title">
+            <h2>最新商品</h2>
+            <a href="{{ url_for('admin_products') }}">查看全部</a>
+        </div>
+        {% if latest_products %}
+            <div class="admin-list">
+                {% for product in latest_products %}
+                    <a href="{{ url_for('product_detail', product_id=product.id) }}">
+                        <span>{{ product.title }}</span>
+                        <small>{{ product.status }} · {{ product.points }} 积分 · {{ product.user.nickname }}</small>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">暂无商品。</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="admin-card">
+    <div class="admin-card-title">
+        <h2>最新订单</h2>
+        <a href="{{ url_for('admin_orders') }}">查看全部</a>
+    </div>
+    {% if latest_orders %}
+        <div class="table-responsive">
+            <table class="table align-middle admin-table">
+                <thead>
+                    <tr>
+                        <th>商品</th>
+                        <th>买家</th>
+                        <th>卖家</th>
+                        <th>积分</th>
+                        <th>状态</th>
+                        <th>时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in latest_orders %}
+                        <tr>
+                            <td>{{ order.product.title }}</td>
+                            <td>{{ order.buyer.nickname }}</td>
+                            <td>{{ order.seller.nickname }}</td>
+                            <td>{{ order.points }}</td>
+                            <td>{{ order.status }}</td>
+                            <td>{{ order.create_time.strftime("%Y-%m-%d %H:%M") }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted mb-0">暂无订单。</p>
+    {% endif %}
+</div>
+{% endblock %}

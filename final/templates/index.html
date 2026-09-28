@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 旧物循用{% endblock %}
+
+{% block content %}
+{% set categories = [
+    ("", "全部"),
+    ("教材", "书籍教材"),
+    ("电子产品", "电子产品"),
+    ("生活用品", "生活用品"),
+    ("其他", "其他")
+] %}
+
+<section class="home-page">
+    <section class="hero-card">
+        <div class="hero-content">
+            <span class="hero-kicker">校园闲置市集</span>
+            <h1>让闲置好物在校园里重新流动起来</h1>
+            <p>发布教材、数码设备和生活用品，也可以快速找到同学们正在出售的好物。</p>
+            <div class="hero-actions">
+                <a class="btn btn-primary btn-lg" href="{{ url_for('publish') }}">发布商品</a>
+                <a class="btn btn-outline-primary btn-lg" href="#latest-products">浏览最新</a>
+            </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+            <div class="hero-orbit hero-orbit-main">
+                <span>循环</span>
+                <strong>旧物新用</strong>
+            </div>
+            <div class="mini-card mini-card-book">教材</div>
+            <div class="mini-card mini-card-tech">数码</div>
+            <div class="mini-card mini-card-life">生活</div>
+        </div>
+    </section>
+
+    <section class="search-card">
+        <form class="hero-search" action="{{ url_for('index') }}" method="get">
+            <input type="hidden" name="search_mode" value="keyword">
+            <input class="form-control" type="search" name="q" value="{{ search_keyword if search_mode not in ['ai', 'ai_exact'] else '' }}" placeholder="搜索教材、耳机、台灯、自行车……">
+            <button class="btn btn-primary" type="submit">搜索</button>
+        </form>
+        <div class="category-strip" aria-label="商品分类">
+            {% for value, label in categories %}
+                <a class="category-pill {% if (not value and not search_keyword) or (value and search_mode == 'keyword' and search_keyword == value) %}active{% endif %}"
+                   href="{{ url_for('index') if not value else url_for('index', q=value, search_mode='keyword') }}">
+                    {{ label }}
+                </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <div class="dashboard-layout" id="latest-products">
+        <aside class="left-rail">
+            <section class="side-card">
+                <div class="side-card-title">快捷入口</div>
+                <div class="side-links">
+                    <a href="{{ url_for('index') }}">全部商品</a>
+                    <a href="{{ url_for('publish') }}">发布闲置</a>
+                    <a href="{{ url_for('profile') }}#favorites">我的收藏</a>
+                    {% if current_user_is_admin %}
+                        <a href="{{ url_for('admin_dashboard') }}">管理后台</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="side-card">
+                <div class="side-card-title">好友栏</div>
+                <a class="btn btn-outline-primary w-100 mt-2" href="{{ url_for('profile') }}#friends">添加好友</a>
+                <div class="chat-list">
+                    {% if friends %}
+                        {% for friend in friends %}
+                            <a class="chat-contact" href="{{ url_for('index', chat_with=friend.id) }}"><span>{{ friend.nickname }}</span></a>
+                        {% endfor %}
+                    {% else %}
+                        <div class="chat-contact muted-contact"><span>暂无好友</span></div>
+                    {% endif %}
+                </div>
+            </section>
+        </aside>
+
+        <section class="latest-panel">
+            <div class="section-header">
+                <div>
+                    <span class="section-eyebrow">最新上架</span>
+                    <h2>商品列表</h2>
+                    <p>按发布时间排序，优先展示仍在售的校园闲置。</p>
+                </div>
+                {% if search_keyword %}
+                    <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">清空搜索</a>
+                {% endif %}
+            </div>
+
+            {% if ai_search_used %}
+                <div class="ai-search-summary">
+                    <div>
+                        <strong>{{ "AI 精准理解：" if ai_search_exact else "AI 理解：" }}</strong>{{ ai_search_summary or search_keyword }}
+                    </div>
+                    <div class="ai-search-tags">
+                        {% for keyword in ai_search_keywords %}
+                            <span>{{ keyword }}</span>
+                        {% endfor %}
+                        {% for tag in ai_search_tags %}
+                            <span>{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if products %}
+                <div class="product-grid">
+                    {% for product in products %}
+                        <article class="product-card">
+                            <a class="product-image-link" href="{{ url_for('product_detail', product_id=product.id) }}">
+                                <img src="{{ product.first_image_url }}" class="product-image" alt="{{ product.title }}">
+                            </a>
+                            <div class="product-body">
+                                <h3 class="product-title">
+                                    <a href="{{ url_for('product_detail', product_id=product.id) }}">{{ product.title }}</a>
+                                </h3>
+                                <div class="tag-row">
+                                    {% for tag in product.tag_list %}
+                                        <span class="tag-pill">{{ tag }}</span>
+                                    {% endfor %}
+                                </div>
+                                <p class="product-description">{{ product.description }}</p>
+                                <div class="product-price-row">
+                                    <span class="points">{{ product.points }} 积分</span>
+                                    <span>{{ product.create_time.strftime("%m-%d %H:%M") }}</span>
+                                </div>
+                                <div class="publisher">
+                                    <span>发布者：{{ product.user.nickname }}</span>
+                                    {% if product.user.is_verified %}
+                                        <span class="verified-badge">已认证</span>
+                                    {% endif %}
+                                </div>
+                                <div class="product-actions">
+                                    <a class="btn btn-sm btn-primary-soft" href="{{ url_for('product_detail', product_id=product.id) }}">查看详情</a>
+                                    {% if product.user_id != current_user_id %}
+                                        <form method="post" action="{{ url_for('toggle_favorite', product_id=product.id) }}">
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">
+                                                {{ "取消收藏" if product.id in favorite_product_ids else "收藏" }}
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+                <div class="load-more-hint">滚动加载更多</div>
+            {% else %}
+                <div class="empty-state">
+                    {% if search_keyword %}
+                        <h2>没有找到相关在售商品</h2>
+                        <p>可以换个描述或关键词再试，例如商品名称、用途、标签或预算。</p>
+                        <a class="btn btn-outline-primary" href="{{ url_for('index') }}">清空搜索</a>
+                    {% else %}
+                        <h2>还没有在售商品</h2>
+                        <p>发布商品时可以用多个标签描述它，例如 #教材 #台灯。</p>
+                        <a class="btn btn-primary" href="{{ url_for('publish') }}">去发布商品</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        <aside class="ai-finder-panel">
+            <div class="ai-card-header">
+                <div class="ai-icon">AI</div>
+                <div>
+                    <h2>AI帮你找</h2>
+                    <p>描述你想要的商品，系统会帮你匹配相关闲置。</p>
+                </div>
+            </div>
+            <form class="ai-finder-form" action="{{ url_for('index') }}" method="get">
+                <label class="form-label" for="ai_query">描述需求</label>
+                <textarea class="form-control" id="ai_query" name="q" rows="5" placeholder="例如：想买一本适合考研数学复习的教材">{{ search_keyword if search_mode in ['ai', 'ai_exact'] else '' }}</textarea>
+                <button class="btn btn-primary w-100" type="submit" name="search_mode" value="ai">开始寻找</button>
+                <button class="btn btn-outline-primary w-100" type="submit" name="search_mode" value="ai_exact">精准搜索</button>
+            </form>
+
+            {% if ai_search_attempted %}
+                {% if ai_search_used %}
+                    <div class="ai-finder-result">
+                        <div class="ai-finder-result-title">{{ "AI 精准理解" if ai_search_exact else "AI 理解" }}</div>
+                        <p>{{ ai_search_summary or search_keyword }}</p>
+                        <div class="ai-search-tags">
+                            {% for keyword in ai_search_keywords %}
+                                <span>{{ keyword }}</span>
+                            {% endfor %}
+                            {% for tag in ai_search_tags %}
+                                <span>{{ tag }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="ai-finder-result muted">
+                        {{ ai_status_message }}
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="ai-finder-empty">输入需求后，AI 会在商品列表中帮你筛选更合适的商品。</div>
+            {% endif %}
+        </aside>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}注册 - 旧物循用{% endblock %}
+
+{% block content %}
+<section class="auth-page">
+    <div class="auth-card">
+        <div class="auth-card-header">
+            <span class="auth-badge">加入旧物循用</span>
+            <h1>创建你的校园账号</h1>
+            <p class="auth-subtitle">创建账号后即可发布闲置、联系同学和管理订单。</p>
+        </div>
+
+        <form method="post">
+            <div class="mb-3">
+                <label for="account" class="form-label">用户名</label>
+                <input type="text" class="form-control" id="account" name="account" value="{{ account or '' }}" placeholder="用于登录的用户名">
+            </div>
+            <div class="mb-3">
+                <label for="nickname" class="form-label">昵称</label>
+                <input type="text" class="form-control" id="nickname" name="nickname" value="{{ nickname or '' }}" placeholder="请输入昵称">
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">密码</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="不少于 6 位">
+            </div>
+            <div class="mb-4">
+                <label for="confirm_password" class="form-label">确认密码</label>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" placeholder="请再次输入密码">
+            </div>
+            <button type="submit" class="btn btn-gradient w-100">注册</button>
+        </form>
+
+        <div class="auth-footer">
+            已有账号？<a href="{{ url_for('login') }}">去登录</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

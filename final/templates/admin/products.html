@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+
+{% block title %}商品管理 - 旧物循用{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header">
+    <div>
+        <h1>商品管理</h1>
+        <p>检索商品并调整商品状态。</p>
+    </div>
+    <form class="admin-search" method="get" action="{{ url_for('admin_products') }}">
+        <input class="form-control" name="q" value="{{ search_keyword }}" placeholder="搜索标题、描述、标签">
+        <select class="form-select" name="status">
+            <option value="">全部状态</option>
+            {% for status in product_status_options %}
+                <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">筛选</button>
+    </form>
+</div>
+
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table align-middle admin-table">
+            <thead>
+                <tr>
+                    <th>商品</th>
+                    <th>发布者</th>
+                    <th>积分</th>
+                    <th>状态</th>
+                    <th>浏览</th>
+                    <th>发布时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                    <tr>
+                        <td>
+                            <div class="profile-product-cell">
+                                <img src="{{ product.first_image_url }}" alt="{{ product.title }}">
+                                <div>
+                                    <a href="{{ url_for('product_detail', product_id=product.id) }}">{{ product.title }}</a>
+                                    <div class="text-muted small">{{ product.tags }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ product.user.nickname }}</strong>
+                            <div class="text-muted small">{{ product.user.account }}</div>
+                        </td>
+                        <td>{{ product.points }}</td>
+                        <td>{{ product.status }}</td>
+                        <td>{{ product.view_count }}</td>
+                        <td>{{ product.create_time.strftime("%Y-%m-%d %H:%M") }}</td>
+                        <td>
+                            <form method="post" action="{{ url_for('admin_update_product_status', product_id=product.id) }}" class="status-form">
+                                <select class="form-select form-select-sm" name="status">
+                                    {% for status in product_status_options %}
+                                        <option value="{{ status }}" {% if product.status == status %}selected{% endif %}>{{ status }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-sm btn-outline-primary" type="submit">保存</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">暂无匹配商品。</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

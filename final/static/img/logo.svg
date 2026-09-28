@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">旧物循用</title>
+  <desc id="desc">校园二手循环交易平台标志</desc>
+  <rect width="128" height="128" rx="24" fill="#2563eb"/>
+  <path d="M36 38h56c8 0 14 6 14 14v10H94V52c0-2-2-4-4-4H38c-2 0-4 2-4 4v44c0 2 2 4 4 4h52c2 0 4-2 4-4V84h12v12c0 8-6 14-14 14H36c-8 0-14-6-14-14V52c0-8 6-14 14-14z" fill="#fff"/>
+  <path d="M48 64h39l-10-10 8-8 24 24-24 24-8-8 10-10H48V64z" fill="#bfdbfe"/>
+  <circle cx="37" cy="74" r="8" fill="#dcfce7"/>
+</svg>
