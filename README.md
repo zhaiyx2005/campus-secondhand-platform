@@ -7,7 +7,8 @@
 不想配 Python 环境？直接下载打包好的 Windows 免安装版：
 
 - **Gitee Releases（国内推荐，秒开）**：https://gitee.com/zhaiyx2005/campus-secondhand-platform/releases/tag/v1.0 （约 17 MB）
-- **GitHub Releases**：https://github.com/zhaiyx2005/campus-secondhand-platform/releases/latest （约 17 MB）
+- **GitHub**：https://github.com/zhaiyx2005/campus-secondhand-platform —— 代码镜像。
+  （GitHub 的附件下载域名在国内网络下不可达，免安装包请从上方 Gitee 下载）
 
 解压后双击 `旧物循用.exe`，程序会自动启动本地服务并打开浏览器（http://127.0.0.1:5000/）。
 首次运行会在同目录生成数据库与上传目录，关闭命令行窗口即停止服务。
