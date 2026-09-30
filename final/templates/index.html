@@ -111,7 +111,7 @@
                     {% for product in products %}
                         <article class="product-card">
                             <a class="product-image-link" href="{{ url_for('product_detail', product_id=product.id) }}">
-                                <img src="{{ product.first_image_url }}" class="product-image" alt="{{ product.title }}">
+                                <img src="{{ product.first_image_url|product_image_url }}" class="product-image" alt="{{ product.title }}">
                             </a>
                             <div class="product-body">
                                 <h3 class="product-title">
@@ -147,7 +147,15 @@
                         </article>
                     {% endfor %}
                 </div>
-                <div class="load-more-hint">滚动加载更多</div>
+                <nav class="d-flex justify-content-center gap-2 mt-4" aria-label="商品分页">
+                    {% if page > 1 %}
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('index', q=search_keyword, search_mode=search_mode, page=page - 1) }}">上一页</a>
+                    {% endif %}
+                    <span class="btn btn-light btn-sm disabled">第 {{ page }} 页</span>
+                    {% if has_next %}
+                        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('index', q=search_keyword, search_mode=search_mode, page=page + 1) }}">下一页</a>
+                    {% endif %}
+                </nav>
             {% else %}
                 <div class="empty-state">
                     {% if search_keyword %}

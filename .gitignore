@@ -16,7 +16,10 @@ build/
 
 # 数据库（含运行时数据）
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
+.pytest_cache/
 
 # 用户上传的文件
 uploads/

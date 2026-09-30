@@ -58,7 +58,7 @@ def parse_product_search_intent(query_text, config):
     try:
         with urllib.request.urlopen(request, timeout=config.get("AI_REQUEST_TIMEOUT", 12)) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
         return None
 
     content = _extract_message_content(response_data)
@@ -71,6 +71,8 @@ def parse_product_search_intent(query_text, config):
         parsed = _parse_embedded_json(content)
         if parsed is None:
             return None
+    if not isinstance(parsed, dict):
+        return None
 
     return _normalize_intent(parsed)
 
@@ -104,7 +106,7 @@ def generate_product_tags(title, description, config):
     try:
         with urllib.request.urlopen(request, timeout=config.get("AI_REQUEST_TIMEOUT", 12)) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-    except (OSError, urllib.error.URLError, json.JSONDecodeError):
+    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
         return []
 
     content = _extract_message_content(response_data)
@@ -116,15 +118,25 @@ def generate_product_tags(title, description, config):
         parsed = _parse_embedded_json(content)
         if parsed is None:
             return []
+    if not isinstance(parsed, dict):
+        return []
     return _clean_text_list(parsed.get("tags"), max_items=6, with_hash=True)
 
 
 def _extract_message_content(response_data):
+    if not isinstance(response_data, dict):
+        return ""
     choices = response_data.get("choices") or []
     if not choices:
         return ""
     message = choices[0].get("message") or {}
-    return (message.get("content") or "").strip()
+    content = message.get("content") or ""
+    if isinstance(content, list):
+        content = "".join(
+            item.get("text", "") if isinstance(item, dict) else str(item)
+            for item in content
+        )
+    return str(content).strip()
 
 
 def _parse_embedded_json(content):
@@ -141,7 +153,7 @@ def _normalize_intent(parsed):
     keywords = _clean_text_list(parsed.get("keywords"), max_items=8, with_hash=False)
     tags = _clean_text_list(parsed.get("tags"), max_items=6, with_hash=True)
     return {
-        "intent_summary": str(parsed.get("intent_summary") or "").strip()[:80],
+        "intent_summary": str(parsed.get("intent_summary") or "").strip()[:80].strip(),
         "keywords": keywords,
         "tags": tags,
         "min_points": _clean_int(parsed.get("min_points")),

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480">
+  <rect width="720" height="480" fill="#edf2f7"/>
+  <rect x="278" y="106" width="164" height="126" rx="18" fill="#fff" stroke="#94a3b8" stroke-width="6"/>
+  <circle cx="320" cy="147" r="14" fill="#cbd5e1"/>
+  <path d="M293 215l48-45 32 29 28-24 26 40" fill="none" stroke="#94a3b8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="360" y="295" text-anchor="middle" fill="#475569" font-size="32" font-family="Microsoft YaHei, sans-serif">图片暂不可用</text>
+  <text x="360" y="343" text-anchor="middle" fill="#64748b" font-size="21" font-family="Microsoft YaHei, sans-serif">请卖家补传实物图片</text>
+</svg>

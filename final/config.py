@@ -15,8 +15,21 @@ USE_DEEPSEEK_DEFAULTS = bool(DEEPSEEK_API_KEY) and not AI_API_KEY
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
-    SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "campus_second_hand.db")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL",
+        "sqlite:///" + os.path.join(BASE_DIR, "campus_second_hand.db"),
+    ).replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "connect_args": {
+            "timeout": int(os.environ.get("DB_BUSY_TIMEOUT", "30")),
+            "check_same_thread": False,
+        },
+    }
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif"}
@@ -30,3 +43,9 @@ class Config:
     )
     AI_MODEL = os.environ.get("AI_MODEL", "deepseek-chat" if USE_DEEPSEEK_DEFAULTS else "gpt-4o-mini")
     AI_REQUEST_TIMEOUT = int(os.environ.get("AI_REQUEST_TIMEOUT", "12"))
+    PAGE_SIZE = max(1, min(int(os.environ.get("PAGE_SIZE", "24")), 100))
+
+
+if not Config.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+    # ``check_same_thread`` and SQLite's busy timeout are driver-specific.
+    Config.SQLALCHEMY_ENGINE_OPTIONS["connect_args"] = {}

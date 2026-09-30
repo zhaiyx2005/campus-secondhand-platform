@@ -27,6 +27,11 @@ class User(db.Model):
     create_time = db.Column(db.DateTime, default=datetime.now, nullable=False)
     update_time = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
+    __table_args__ = (
+        db.Index("ix_user_create_time", "create_time"),
+        db.Index("ix_user_admin_verified", "is_admin", "is_verified"),
+    )
+
     products = db.relationship("Product", back_populates="user", cascade="all, delete-orphan")
     point_records = db.relationship("PointRecord", back_populates="user", cascade="all, delete-orphan")
     point_recharge_requests = db.relationship(
@@ -101,6 +106,12 @@ class Product(db.Model):
     create_time = db.Column(db.DateTime, default=datetime.now, nullable=False)
     update_time = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
+    __table_args__ = (
+        db.Index("ix_product_status_create_time", "status", "create_time"),
+        db.Index("ix_product_user_status", "user_id", "status"),
+        db.Index("ix_product_points_status", "points", "status"),
+    )
+
     user = db.relationship("User", back_populates="products")
     images = db.relationship(
         "ProductImage",
@@ -132,6 +143,8 @@ class ProductImage(db.Model):
     sort_order = db.Column(db.Integer, default=0, nullable=False)
     create_time = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
+    __table_args__ = (db.Index("ix_product_image_product_sort", "product_id", "sort_order"),)
+
     product = db.relationship("Product", back_populates="images")
 
 
@@ -146,11 +159,14 @@ class PointRecord(db.Model):
     remark = db.Column(db.String(255), nullable=True)
     create_time = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
+    __table_args__ = (db.Index("ix_point_record_user_create_time", "user_id", "create_time"),)
+
     user = db.relationship("User", back_populates="point_records")
 
 
 class PointRechargeRequest(db.Model):
     __tablename__ = "point_recharge_request"
+    __table_args__ = (db.Index("ix_recharge_user_status_time", "user_id", "status", "create_time"),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
@@ -173,6 +189,7 @@ class PointRechargeRequest(db.Model):
 
 class StudentVerificationRequest(db.Model):
     __tablename__ = "student_verification_request"
+    __table_args__ = (db.Index("ix_verification_user_status_time", "user_id", "status", "create_time"),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
@@ -226,11 +243,13 @@ class TradeOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False, index=True, unique=True)
     points = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default="已完成", nullable=False)
     create_time = db.Column(db.DateTime, default=datetime.now, nullable=False)
     update_time = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (db.Index("ix_trade_order_create_time", "create_time"),)
 
     buyer = db.relationship("User", foreign_keys=[buyer_id], back_populates="purchases")
     seller = db.relationship("User", foreign_keys=[seller_id], back_populates="sales")
@@ -269,6 +288,10 @@ class Friendship(db.Model):
 
 class ChatMessage(db.Model):
     __tablename__ = "chat_message"
+    __table_args__ = (
+        db.Index("ix_chat_receiver_read_time", "receiver_id", "is_read", "create_time"),
+        db.Index("ix_chat_pair_time", "sender_id", "receiver_id", "create_time"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)

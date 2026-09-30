@@ -138,6 +138,27 @@ flask --app app run --host 127.0.0.1 --port 5001
 http://127.0.0.1:5001
 ```
 
+## 多用户与大数据量测试
+
+进入 `final` 目录后，可以生成可重复的多用户、多类别商品数据：
+
+```powershell
+flask --app app seed-demo --users 20 --products-per-user 100
+```
+
+演示账号格式为 `demo_user_0001`，密码为 `demo123456`。需要重新生成时增加 `--reset`。首页和后台列表已经分页，默认不会一次性读取全部商品或用户。
+
+SQLite 已启用 WAL 和忙等待；多人部署请配置 `DATABASE_URL` 指向 PostgreSQL/MySQL，并使用生产 WSGI 服务器。兑换接口在数据库事务内用条件更新处理并发点击，同一商品只会生成一个订单。
+
+## AI 可用性检查
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:5000/health?ai=1"
+flask --app app test-ai --query "想找 50 积分以内的考研数学教材"
+```
+
+返回的 `ai.available` 或命令输出代表真实接口探测结果。没有 AI Key 时会明确提示并自动使用本地关键词搜索。
+
 ## 功能入口
 
 - 首页：商品列表、好友栏、AI帮你找

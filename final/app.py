@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import uuid
 from datetime import datetime
@@ -16,7 +17,8 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import or_, text
+from sqlalchemy import event, inspect, or_, text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -38,6 +40,7 @@ from models import (
 )
 from services.ai_client import generate_product_tags, parse_product_search_intent
 from services.product_search import search_products
+from services.product_images import product_image_url
 
 
 RECHARGE_PLANS = {
@@ -56,13 +59,16 @@ REQUEST_APPROVED = "已通过"
 REQUEST_REJECTED = "已拒绝"
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(
         __name__,
         template_folder=os.path.join(RESOURCE_DIR, "templates"),
         static_folder=os.path.join(RESOURCE_DIR, "static"),
     )
     app.config.from_object(Config)
+    if test_config:
+        app.config.update(test_config)
+    app.add_template_filter(product_image_url, "product_image_url")
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], "avatars"), exist_ok=True)
@@ -70,6 +76,7 @@ def create_app():
 
     with app.app_context():
         ensure_database_schema()
+        configure_database_connection()
 
     register_routes(app)
     register_commands(app)
@@ -78,7 +85,8 @@ def create_app():
 
 def ensure_database_schema():
     db.create_all()
-    user_columns = {row[1] for row in db.session.execute(text("PRAGMA table_info(user)")).fetchall()}
+    inspector = inspect(db.engine)
+    user_columns = {column["name"] for column in inspector.get_columns("user")}
     user_additions = {
         "real_name": "ALTER TABLE user ADD COLUMN real_name VARCHAR(80)",
         "student_id": "ALTER TABLE user ADD COLUMN student_id VARCHAR(60)",
@@ -93,7 +101,7 @@ def ensure_database_schema():
         if column not in user_columns:
             db.session.execute(text(ddl))
 
-    product_columns = {row[1] for row in db.session.execute(text("PRAGMA table_info(product)")).fetchall()}
+    product_columns = {column["name"] for column in inspector.get_columns("product")}
     product_additions = {
         "points": "ALTER TABLE product ADD COLUMN points INTEGER NOT NULL DEFAULT 1",
         "tags": "ALTER TABLE product ADD COLUMN tags VARCHAR(255) NOT NULL DEFAULT '#其他'",
@@ -104,6 +112,58 @@ def ensure_database_schema():
             db.session.execute(text(ddl))
 
     db.session.commit()
+
+    # Existing installations predate the ORM indexes above. Creating them here
+    # keeps upgrades safe and makes list/search queries predictable at scale.
+    index_statements = (
+        "CREATE INDEX IF NOT EXISTS ix_product_status_create_time ON product (status, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_product_user_status ON product (user_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_product_points_status ON product (points, status)",
+        "CREATE INDEX IF NOT EXISTS ix_product_image_product_sort ON product_image (product_id, sort_order)",
+        "CREATE INDEX IF NOT EXISTS ix_point_record_user_create_time ON point_record (user_id, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_recharge_user_status_time ON point_recharge_request (user_id, status, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_verification_user_status_time ON student_verification_request (user_id, status, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_chat_receiver_read_time ON chat_message (receiver_id, is_read, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_chat_pair_time ON chat_message (sender_id, receiver_id, create_time)",
+        "CREATE INDEX IF NOT EXISTS ix_trade_order_create_time ON trade_order (create_time)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_trade_order_product ON trade_order (product_id)",
+        "CREATE INDEX IF NOT EXISTS ix_user_create_time ON user (create_time)",
+    )
+    for statement in index_statements:
+        try:
+            db.session.execute(text(statement))
+        except Exception:
+            # A non-SQLite deployment may use a database-specific index syntax;
+            # ORM metadata still creates the indexes on a fresh database.
+            db.session.rollback()
+    db.session.commit()
+
+
+def configure_database_connection():
+    """Enable safe concurrent reads/writes for the bundled SQLite deployment."""
+    if not db.engine.url.drivername.startswith("sqlite"):
+        return
+
+    connection = db.engine.raw_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+        connection.commit()
+    finally:
+        connection.close()
+
+    @event.listens_for(db.engine, "connect")
+    def _configure_sqlite_connection(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
 
 
 def login_required(view_func):
@@ -469,11 +529,15 @@ def admin_dashboard_context():
         "sold_count": Product.query.filter_by(status="已售出").count(),
         "removed_count": Product.query.filter_by(status="已下架").count(),
         "order_count": TradeOrder.query.count(),
-        "order_points_total": sum(order.points for order in TradeOrder.query.all()),
+        "order_points_total": db.session.query(db.func.coalesce(db.func.sum(TradeOrder.points), 0)).scalar() or 0,
         "latest_products": products,
         "latest_orders": orders,
         "latest_users": users,
     }
+
+
+def requested_page(default=1):
+    return max(request.args.get("page", default, type=int), 1)
 
 
 def profile_context(user):
@@ -566,6 +630,39 @@ def profile_context(user):
 
 
 def register_routes(app):
+    @app.route("/health")
+    def health_check():
+        """Small readiness endpoint for local monitoring and deployment probes."""
+        database_ok = True
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception:
+            database_ok = False
+            db.session.rollback()
+
+        ai_configured = bool(app.config.get("AI_ENABLED") and app.config.get("AI_API_KEY"))
+        response = {
+            "status": "ok" if database_ok else "degraded",
+            "database": "ok" if database_ok else "error",
+            "ai": {"configured": ai_configured, "enabled": bool(app.config.get("AI_ENABLED"))},
+        }
+        if request.args.get("ai", "").lower() in {"1", "true", "yes"}:
+            intent = parse_product_search_intent("测试 AI 商品搜索", app.config)
+            ai_available = bool(
+                intent
+                and (
+                    intent.get("intent_summary")
+                    or intent.get("keywords")
+                    or intent.get("tags")
+                    or intent.get("min_points") is not None
+                    or intent.get("max_points") is not None
+                )
+            )
+            response["ai"]["available"] = ai_available
+            if ai_configured and not ai_available:
+                response["status"] = "degraded"
+        return jsonify(response), 200 if database_ok else 503
+
     @app.context_processor
     def inject_template_vars():
         user = current_user()
@@ -582,6 +679,8 @@ def register_routes(app):
     def index():
         user = current_user()
         q = request.args.get("q", "").strip()
+        page = max(request.args.get("page", 1, type=int), 1)
+        page_size = app.config.get("PAGE_SIZE", 24)
         search_mode = request.args.get("search_mode", "keyword")
         ai_search_intent = None
         ai_search_exact = search_mode == "ai_exact"
@@ -597,7 +696,15 @@ def register_routes(app):
                 else:
                     ai_status_message = "AI 接口调用失败或返回格式异常，当前已按关键词搜索。请检查网络、Key、模型名和 API 额度。"
 
-        products = search_products(q, ai_search_intent, exact=ai_search_exact)
+        products = search_products(
+            q,
+            ai_search_intent,
+            exact=ai_search_exact,
+            limit=page_size + 1,
+            offset=(page - 1) * page_size,
+        )
+        has_next = len(products) > page_size
+        products = products[:page_size]
         return render_template(
             "index.html",
             products=products,
@@ -610,6 +717,9 @@ def register_routes(app):
             ai_search_summary=(ai_search_intent or {}).get("intent_summary", ""),
             ai_search_keywords=(ai_search_intent or {}).get("keywords", []),
             ai_search_tags=(ai_search_intent or {}).get("tags", []),
+            page=page,
+            has_next=has_next,
+            page_size=page_size,
             favorite_product_ids=favorite_product_ids(user.id),
             friends=user_friends(user),
         )
@@ -659,12 +769,6 @@ def register_routes(app):
         if product.user_id == buyer.id:
             flash("不能购买自己发布的商品。", "warning")
             return redirect(url_for("product_detail", product_id=product.id))
-        if product.status != "在售":
-            flash("该商品当前不可购买。", "danger")
-            return redirect(url_for("product_detail", product_id=product.id))
-        if TradeOrder.query.filter_by(product_id=product.id).first():
-            flash("该商品已经生成订单。", "danger")
-            return redirect(url_for("product_detail", product_id=product.id))
         if buyer.points_balance < product.points:
             flash("积分余额不足，请先充值。", "danger")
             return redirect(url_for("product_detail", product_id=product.id))
@@ -672,20 +776,49 @@ def register_routes(app):
             flash("请先在个人中心填写收货地址，再兑换商品。", "warning")
             return redirect(url_for("profile"))
 
-        buyer.points_balance -= product.points
-        seller.points_balance += product.points
-        product.status = "已售出"
+        # Conditional updates turn the purchase into an optimistic lock: only
+        # one concurrent request can move an item from 在售 to 已售出, and the
+        # balance check happens inside the same database transaction.
+        product_title = product.title
+        product_points = product.points
+        sold_rows = Product.query.filter_by(id=product.id, status="在售").update(
+            {Product.status: "已售出"}, synchronize_session=False
+        )
+        charged_rows = User.query.filter(
+            User.id == buyer.id,
+            User.points_balance >= product_points,
+        ).update(
+            {User.points_balance: User.points_balance - product_points},
+            synchronize_session=False,
+        ) if sold_rows else 0
+        if sold_rows != 1 or charged_rows != 1:
+            db.session.rollback()
+            flash("该商品刚刚被其他用户购买或积分余额已变化，请刷新后重试。", "warning")
+            return redirect(url_for("product_detail", product_id=product.id))
+
+        User.query.filter_by(id=seller.id).update(
+            {User.points_balance: User.points_balance + product_points},
+            synchronize_session=False,
+        )
+        db.session.expire_all()
+        buyer = db.session.get(User, buyer.id)
+        seller = db.session.get(User, seller.id)
         order = TradeOrder(
             buyer_id=buyer.id,
             seller_id=seller.id,
             product_id=product.id,
-            points=product.points,
+            points=product_points,
             status=ORDER_STATUS_COMPLETED,
         )
         db.session.add(order)
-        add_point_record(buyer, -product.points, "购买", f"购买商品：{product.title}")
-        add_point_record(seller, product.points, "售出", f"售出商品：{product.title}")
-        db.session.commit()
+        add_point_record(buyer, -product_points, "购买", f"购买商品：{product_title}")
+        add_point_record(seller, product_points, "售出", f"售出商品：{product_title}")
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash("该商品刚刚被其他用户购买，请刷新后查看订单。", "warning")
+            return redirect(url_for("product_detail", product_id=product.id))
         flash("交易完成，积分已结算。", "success")
         return redirect(url_for("profile"))
 
@@ -784,6 +917,7 @@ def register_routes(app):
     @admin_required
     def admin_users():
         q = request.args.get("q", "").strip()
+        page = requested_page()
         query = User.query
         if q:
             like_text = f"%{q}%"
@@ -796,8 +930,8 @@ def register_routes(app):
                     User.contact.like(like_text),
                 )
             )
-        users = query.order_by(User.create_time.desc()).all()
-        return render_template("admin/users.html", users=users, search_keyword=q)
+        pagination = query.order_by(User.create_time.desc()).paginate(page=page, per_page=50, error_out=False)
+        return render_template("admin/users.html", users=pagination.items, pagination=pagination, search_keyword=q)
 
     @app.route("/admin/users/<int:user_id>/toggle-admin", methods=["POST"])
     @admin_required
@@ -871,13 +1005,15 @@ def register_routes(app):
     @admin_required
     def admin_points():
         status = request.args.get("status", "").strip()
+        page = requested_page()
         query = PointRechargeRequest.query
         if status in {REQUEST_PENDING, REQUEST_APPROVED, REQUEST_REJECTED}:
             query = query.filter_by(status=status)
-        requests = query.order_by(PointRechargeRequest.create_time.desc()).all()
+        pagination = query.order_by(PointRechargeRequest.create_time.desc()).paginate(page=page, per_page=50, error_out=False)
         return render_template(
             "admin/points.html",
-            requests=requests,
+            requests=pagination.items,
+            pagination=pagination,
             selected_status=status,
             request_status_options=(REQUEST_PENDING, REQUEST_APPROVED, REQUEST_REJECTED),
         )
@@ -917,13 +1053,15 @@ def register_routes(app):
     @admin_required
     def admin_verifications():
         status = request.args.get("status", "").strip()
+        page = requested_page()
         query = StudentVerificationRequest.query
         if status in {REQUEST_PENDING, REQUEST_APPROVED, REQUEST_REJECTED}:
             query = query.filter_by(status=status)
-        requests = query.order_by(StudentVerificationRequest.create_time.desc()).all()
+        pagination = query.order_by(StudentVerificationRequest.create_time.desc()).paginate(page=page, per_page=50, error_out=False)
         return render_template(
             "admin/verifications.html",
-            requests=requests,
+            requests=pagination.items,
+            pagination=pagination,
             selected_status=status,
             request_status_options=(REQUEST_PENDING, REQUEST_APPROVED, REQUEST_REJECTED),
         )
@@ -965,6 +1103,7 @@ def register_routes(app):
     def admin_products():
         q = request.args.get("q", "").strip()
         status = request.args.get("status", "").strip()
+        page = requested_page()
         query = Product.query
         if status in PRODUCT_STATUSES:
             query = query.filter_by(status=status)
@@ -977,10 +1116,11 @@ def register_routes(app):
                     Product.tags.like(like_text),
                 )
             )
-        products = query.order_by(Product.create_time.desc()).all()
+        pagination = query.order_by(Product.create_time.desc()).paginate(page=page, per_page=50, error_out=False)
         return render_template(
             "admin/products.html",
-            products=products,
+            products=pagination.items,
+            pagination=pagination,
             product_status_options=PRODUCT_STATUS_OPTIONS,
             search_keyword=q,
             selected_status=status,
@@ -1003,6 +1143,7 @@ def register_routes(app):
     @admin_required
     def admin_orders():
         q = request.args.get("q", "").strip()
+        page = requested_page()
         query = TradeOrder.query.join(Product, TradeOrder.product_id == Product.id)
         if q:
             like_text = f"%{q}%"
@@ -1013,8 +1154,8 @@ def register_routes(app):
                     User.nickname.like(like_text),
                 )
             )
-        orders = query.order_by(TradeOrder.create_time.desc()).all()
-        return render_template("admin/orders.html", orders=orders, search_keyword=q)
+        pagination = query.order_by(TradeOrder.create_time.desc()).paginate(page=page, per_page=50, error_out=False)
+        return render_template("admin/orders.html", orders=pagination.items, pagination=pagination, search_keyword=q)
 
     @app.route("/friends/request", methods=["POST"])
     @login_required
@@ -1450,6 +1591,83 @@ def register_commands(app):
             message = "已创建管理员账号。"
         db.session.commit()
         click.echo(message)
+
+    @app.cli.command("test-ai")
+    @click.option("--query", default="想找适合考研数学复习的教材", show_default=True)
+    def test_ai_command(query):
+        """Probe the configured AI endpoint and print the parsed intent."""
+        if not app.config.get("AI_ENABLED") or not app.config.get("AI_API_KEY"):
+            click.echo("AI 未配置：请设置 AI_ENABLED=true 和 AI_API_KEY（或 DEEPSEEK_API_KEY）。")
+            click.echo("本地搜索仍可用，首页会自动降级为关键词检索。")
+            return
+        intent = parse_product_search_intent(query, app.config)
+        if not intent or not (
+            intent.get("intent_summary") or intent.get("keywords") or intent.get("tags")
+        ):
+            raise click.ClickException("AI 调用失败或返回格式无法解析，请检查网络、Key、模型和额度。")
+        click.echo(json.dumps(intent, ensure_ascii=False, indent=2))
+
+    @app.cli.command("seed-demo")
+    @click.option("--users", default=8, show_default=True, type=click.IntRange(1, 500))
+    @click.option("--products-per-user", default=20, show_default=True, type=click.IntRange(1, 1000))
+    @click.option("--reset", is_flag=True, help="删除之前生成的 demo_ 账号及其数据后重建")
+    def seed_demo_command(users, products_per_user, reset):
+        """Generate repeatable multi-user and multi-category test data."""
+        from itertools import cycle
+
+        categories = cycle(
+            [
+                ("考研高等数学教材", "九成新高数教材，适合考研复习", "#教材 #考研 #九成新"),
+                ("蓝牙降噪耳机", "通勤和自习都好用，功能正常", "#数码 #耳机 #生活用品"),
+                ("宿舍护眼台灯", "三档亮度，毕业闲置，成色很好", "#生活用品 #台灯 #毕业闲置"),
+                ("篮球训练套装", "适合操场训练，含球和打气筒", "#运动 #篮球 #套装"),
+                ("冬季外套", "尺码 M，保暖耐穿，欢迎当面验货", "#衣物 #外套 #九成新"),
+                ("校园零食礼包", "独立包装，日期新鲜，适合宿舍分享", "#食品 #零食 #分享"),
+            ]
+        )
+        if reset:
+            demo_users = User.query.filter(User.account.like("demo_user_%")).all()
+            for demo_user in demo_users:
+                delete_user_and_related_data(demo_user)
+            db.session.commit()
+
+        demo_users = []
+        for index in range(1, users + 1):
+            account = f"demo_user_{index:04d}"
+            user = User.query.filter_by(account=account).first()
+            if user is None:
+                user = User(
+                    account=account,
+                    nickname=f"演示用户{index:04d}",
+                    password=generate_password_hash("demo123456"),
+                    school="校园演示数据",
+                    contact=f"demo-{index:04d}",
+                    points_balance=1000,
+                )
+                db.session.add(user)
+            demo_users.append(user)
+        db.session.flush()
+
+        created = 0
+        for user in demo_users:
+            existing = Product.query.filter_by(user_id=user.id).count()
+            for offset in range(existing, products_per_user):
+                title, description, tags = next(categories)
+                product = Product(
+                    user_id=user.id,
+                    title=f"{title} {user.id}-{offset + 1}",
+                    description=description,
+                    points=10 + ((user.id + offset) % 10) * 5,
+                    tags=tags,
+                    status="在售" if offset % 17 else "已下架",
+                    view_count=(user.id * 13 + offset) % 120,
+                )
+                db.session.add(product)
+                db.session.flush()
+                db.session.add(ProductImage(product_id=product.id, image_url="/static/img/product-placeholder.svg", sort_order=0))
+                created += 1
+        db.session.commit()
+        click.echo(f"演示数据完成：{len(demo_users)} 个用户，每人最多 {products_per_user} 个商品，本次新增 {created} 个商品。")
 
 
 app = create_app()

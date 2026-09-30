@@ -182,3 +182,47 @@ AI_MODEL=deepseek-chat
 - 未登录访问 `/`、`/publish`、`/profile` 会自动跳转到 `/login`。
 - 发布商品时校验标题、描述、积分、标签、图片数量和图片格式。
 - 密码使用 `werkzeug.security` 加密后保存，数据库不保存明文密码。
+
+## 升级后的规模与并发能力
+
+- 首页、用户、商品、订单和审核列表都使用数据库分页，默认每页 24/50 条，避免数据量增长后一次性加载全部记录。
+- 商品搜索对 AI 候选集设置上限，并优先使用状态、时间、用户和积分索引；搜索接口支持 `limit/offset`。
+- SQLite 默认启用 WAL、外键约束和 30 秒忙等待，适合多个浏览器同时访问。部署到多人生产环境时可设置 `DATABASE_URL` 使用 PostgreSQL/MySQL，并使用 Gunicorn 等 WSGI 服务器运行。
+- 商品兑换使用“商品仍在售”和“买家积分足够”的条件更新，同一商品的并发点击只会成功一次；积分扣除、卖家入账、订单和流水在同一事务内提交。
+- 新部署会自动创建索引；旧数据库启动时会补齐常用索引。若旧数据已经存在重复订单，唯一索引会跳过并在日志中保留数据库原状，需要管理员先清理重复数据。
+
+### 生成多组演示数据
+
+在 `final` 目录执行：
+
+```powershell
+flask --app app seed-demo --users 20 --products-per-user 100
+```
+
+该命令会生成多个账号、教材/数码/生活用品/运动/衣物/食品等类别，并重复执行时只补齐缺少的商品。演示账号密码统一为 `demo123456`，账号格式为 `demo_user_0001`。重建演示数据：
+
+```powershell
+flask --app app seed-demo --users 20 --products-per-user 100 --reset
+```
+
+### 检查服务和 AI
+
+```powershell
+# 数据库与配置状态，不会把密钥返回给客户端
+Invoke-RestMethod http://127.0.0.1:5000/health
+
+# 发起一次真实 AI 解析请求；未配置 Key 时会明确提示并保持本地搜索可用
+Invoke-RestMethod "http://127.0.0.1:5000/health?ai=1"
+flask --app app test-ai --query "想找 50 积分以内的考研数学教材"
+```
+
+`health?ai=1` 和 `test-ai` 的 `available`/命令结果为真实接口探测；没有 Key 时系统会自动使用关键词、同义词和规则标签回退，不影响商品搜索。
+
+### 回归测试
+
+```powershell
+pip install -r requirements-dev.txt
+pytest -q tests
+```
+
+测试不依赖外部 AI 服务，覆盖 AI 返回结构清洗和本地同义词召回；真实 AI 是否可用请使用上面的 `test-ai` 或健康检查命令。

@@ -15,20 +15,30 @@ SYNONYM_GROUPS = [
 ]
 
 
-def search_products(query_text="", intent=None, exact=False):
+def search_products(query_text="", intent=None, exact=False, limit=24, offset=0):
+    """Return one bounded catalogue page.
+
+    AI ranking uses a bounded candidate window so a large catalogue cannot
+    force an unbounded Python sort for every request.
+    """
+    # 101 lets callers request a page of 100 plus one sentinel row.
+    limit = max(1, min(int(limit or 24), 101))
+    offset = max(0, int(offset or 0))
     base_query = Product.query.filter_by(status="在售")
     if not query_text:
-        return base_query.order_by(Product.create_time.desc()).all()
+        return base_query.order_by(Product.create_time.desc()).offset(offset).limit(limit).all()
 
     if not intent:
         if exact:
-            return exact_keyword_search_products(base_query, query_text)
-        return keyword_search_products(base_query, query_text)
+            return exact_keyword_search_products(base_query, query_text, limit, offset)
+        return keyword_search_products(base_query, query_text, limit, offset)
 
     terms = _search_terms(query_text, intent)
-    candidates = _candidate_products(base_query, terms, intent)
+    # Ranking is intentionally bounded. A very deep AI page is treated as
+    # empty rather than turning one request into an unbounded database read.
+    candidates = _candidate_products(base_query, terms, intent, 5000)
     if not candidates:
-        candidates = _apply_point_filters(base_query.order_by(Product.create_time.desc()), intent).all()
+        candidates = _apply_point_filters(base_query.order_by(Product.create_time.desc()), intent).limit(5000).all()
 
     condition_groups = _exact_condition_groups(query_text, intent) if exact else []
     scored_products = []
@@ -40,10 +50,10 @@ def search_products(query_text="", intent=None, exact=False):
             scored_products.append((score, product.create_time, product))
 
     scored_products.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return [product for _, _, product in scored_products]
+    return [product for _, _, product in scored_products[offset : offset + limit]]
 
 
-def keyword_search_products(base_query, query_text):
+def keyword_search_products(base_query, query_text, limit=24, offset=0):
     like_text = f"%{query_text}%"
     return (
         base_query.filter(
@@ -54,21 +64,23 @@ def keyword_search_products(base_query, query_text):
             )
         )
         .order_by(Product.create_time.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
 
-def exact_keyword_search_products(base_query, query_text):
+def exact_keyword_search_products(base_query, query_text, limit=24, offset=0):
     groups = _exact_condition_groups(query_text, None)
-    products = base_query.order_by(Product.create_time.desc()).all()
+    products = base_query.order_by(Product.create_time.desc()).limit(5000).all()
     if not groups:
-        return products
-    return [product for product in products if _matches_condition_groups(product, groups)]
+        return products[offset : offset + limit]
+    return [product for product in products if _matches_condition_groups(product, groups)][offset : offset + limit]
 
 
-def _candidate_products(base_query, terms, intent):
+def _candidate_products(base_query, terms, intent, limit=5000):
     if not terms:
-        return _apply_point_filters(base_query.order_by(Product.create_time.desc()), intent).all()
+        return _apply_point_filters(base_query.order_by(Product.create_time.desc()), intent).limit(limit).all()
 
     filters = []
     for term in terms:
@@ -82,7 +94,7 @@ def _candidate_products(base_query, terms, intent):
         )
 
     query = base_query.filter(or_(*filters))
-    return _apply_point_filters(query, intent).order_by(Product.create_time.desc()).all()
+    return _apply_point_filters(query, intent).order_by(Product.create_time.desc()).limit(limit).all()
 
 
 def _apply_point_filters(query, intent):

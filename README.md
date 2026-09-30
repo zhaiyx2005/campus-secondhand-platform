@@ -100,6 +100,26 @@ $env:AI_ENABLED = "true"
 | 地址 | `http://127.0.0.1:5000/admin` |
 | 默认账号 | 由 `flask create-admin` 命令生成 |
 
+## 扩展、并发与测试
+
+当前版本已为增长场景做了基础升级：目录和后台列表分页，商品搜索限制 AI 候选集并使用数据库索引；SQLite 默认开启 WAL、外键和忙等待，多用户兑换通过条件更新保证同一商品只成交一次。多人部署时设置 `DATABASE_URL` 接入 PostgreSQL/MySQL，并用生产 WSGI 服务器运行。
+
+进入 `final` 后可以生成多组可重复演示数据：
+
+```powershell
+flask --app app seed-demo --users 20 --products-per-user 100
+```
+
+检查数据库和 AI 配置：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/health
+Invoke-RestMethod "http://127.0.0.1:5000/health?ai=1"
+flask --app app test-ai
+```
+
+没有配置 AI Key 时，AI 检索会自动回退到本地关键词和同义词搜索；`test-ai` 只有在配置 Key 后才会发起真实接口探测。开发依赖和无网络回归测试位于 `final/requirements-dev.txt` 与 `final/tests/`。
+
 ## 备注
 
 个人学习与作品集项目。运行所需的示例图片与数据库文件不入库，首次运行会自动建库。
