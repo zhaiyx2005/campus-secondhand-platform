@@ -6,7 +6,7 @@
 
 不想配 Python 环境？直接下载打包好的 Windows 免安装版：
 
-- **Gitee Releases（国内推荐，秒开）**：https://gitee.com/zhaiyx2005/campus-secondhand-platform/releases/tag/v1.0 （约 17 MB）
+- **Gitee Releases（国内推荐，秒开）**：https://gitee.com/zhaiyx2005/campus-secondhand-platform/releases/tag/v1.1 （约 16 MB）
 - **GitHub**：https://github.com/zhaiyx2005/campus-secondhand-platform —— 代码镜像。
   （GitHub 的附件下载域名在国内网络下不可达，免安装包请从上方 Gitee 下载）
 
@@ -119,6 +119,26 @@ flask --app app test-ai
 ```
 
 没有配置 AI Key 时，AI 检索会自动回退到本地关键词和同义词搜索；`test-ai` 只有在配置 Key 后才会发起真实接口探测。开发依赖和无网络回归测试位于 `final/requirements-dev.txt` 与 `final/tests/`。
+
+## 更新日志
+
+### v1.1 —— 工程质量升级
+
+- **兑换并发安全**：`TradeOrder.product_id` 增加唯一约束，余额校验与扣减放在同一事务内，
+  配合条件更新与回滚，保证同一商品在并发兑换下只会成交一次
+- **后台分页**：用户 / 充值申请 / 学生认证三个列表改为分页（每页 50 条）
+- **数据库索引**：新增 8 组复合索引（商品 `status + create_time`、积分记录 `user_id + create_time`、
+  聊天 `receiver_id + is_read + create_time` 等）
+- **连接与部署**：SQLite 开启 WAL、外键约束与忙等待；支持 `DATABASE_URL` 切换到 PostgreSQL / MySQL
+- **Cookie 安全**：`HttpOnly` + `SameSite=Lax`，`Secure` 开关可由环境变量控制
+- **图片安全**：新增 `product_image_url` 过滤器，做路径穿越校验，缺失图片回退占位图
+- **AI 检索**：限制候选集规模；未配置 Key 时自动回退本地关键词与同义词搜索
+- **可观测与运维**：新增 `/health` 健康检查、`seed-demo` 演示数据、`test-ai` 配置探测三个入口
+- **测试**：新增 `final/tests/`（pytest）与 `final/requirements-dev.txt`，3 项回归全部通过
+
+### v1.0 —— 首个可玩版本
+
+完整交易闭环（发布 / 检索 / 下单 / 积分结算）、AI 自然语言检索、管理员后台。
 
 ## 备注
 
